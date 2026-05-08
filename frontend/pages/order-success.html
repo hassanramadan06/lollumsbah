@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Order Confirmed — Little Stars</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="header-root"></div>
+  <main class="container section">
+    <div class="panel text-center">
+      <div style="font-size:72px">🎉</div>
+      <h1>Thank you for your order!</h1>
+      <p class="sub">Your order <b id="num"></b> was placed successfully. We'll email you a confirmation shortly.</p>
+      <div class="flex gap-10 flex-center mt-20">
+        <a class="btn btn-primary" href="/pages/products.html">Continue shopping</a>
+        <a class="btn btn-ghost" href="/pages/orders.html">View my orders</a>
+      </div>
+    </div>
+  </main>
+  <div id="footer-root"></div>
+  <script src="/js/config.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    document.getElementById('num').textContent = new URLSearchParams(location.search).get('n') || '';
+  </script>
+</body>
+</html>

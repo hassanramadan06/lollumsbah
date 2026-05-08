@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Shop — Little Stars</title>
+  <meta name="description" content="Browse our full collection of kids clothing with filters for age, gender, size, color and price."/>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="header-root"></div>
+
+  <div class="container">
+    <div class="layout-shop">
+      <aside class="filters">
+        <h3>Search</h3>
+        <div class="filter-group">
+          <input id="fSearch" placeholder="Search products..."/>
+        </div>
+
+        <h3>Age</h3>
+        <div class="filter-group">
+          <label class="chk"><input type="radio" name="age" value=""/> All ages</label>
+          <label class="chk"><input type="radio" name="age" value="1-3"/> 1 – 3 years</label>
+          <label class="chk"><input type="radio" name="age" value="4-6"/> 4 – 6 years</label>
+          <label class="chk"><input type="radio" name="age" value="7-10"/> 7 – 10 years</label>
+        </div>
+
+        <h3>Gender</h3>
+        <div class="filter-group">
+          <label class="chk"><input type="radio" name="gender" value=""/> All</label>
+          <label class="chk"><input type="radio" name="gender" value="boy"/> Boys</label>
+          <label class="chk"><input type="radio" name="gender" value="girl"/> Girls</label>
+          <label class="chk"><input type="radio" name="gender" value="unisex"/> Unisex</label>
+        </div>
+
+        <h3>Size</h3>
+        <div class="filter-group" id="fSize">
+          <select>
+            <option value="">Any size</option>
+          </select>
+        </div>
+
+        <h3>Color</h3>
+        <div class="filter-group" id="fColor">
+          <select>
+            <option value="">Any color</option>
+            <option>Red</option><option>Blue</option><option>Pink</option><option>Yellow</option>
+            <option>Green</option><option>White</option><option>Black</option><option>Mint</option>
+          </select>
+        </div>
+
+        <h3>Price</h3>
+        <div class="filter-group">
+          <div class="form-row">
+            <input id="fMin" type="number" placeholder="Min" min="0"/>
+            <input id="fMax" type="number" placeholder="Max" min="0"/>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-block" id="applyFilters">Apply filters</button>
+        <button class="btn btn-ghost btn-block mt-10" id="resetFilters">Reset</button>
+      </aside>
+
+      <section>
+        <div class="toolbar">
+          <div class="count" id="count">Loading...</div>
+          <select id="fSort" style="max-width:220px">
+            <option value="newest">Newest</option>
+            <option value="price_asc">Price: Low to high</option>
+            <option value="price_desc">Price: High to low</option>
+            <option value="rating">Top rated</option>
+          </select>
+        </div>
+        <div class="products" id="grid"><div class="loader dark"></div></div>
+        <div class="pagination" id="pagination"></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="footer-root"></div>
+
+  <script src="/js/config.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/product-card.js"></script>
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const state = {
+      search: qs.get('search') || '',
+      ageGroup: qs.get('ageGroup') || '',
+      gender: qs.get('gender') || '',
+      size: qs.get('size') || '',
+      color: qs.get('color') || '',
+      minPrice: qs.get('minPrice') || '',
+      maxPrice: qs.get('maxPrice') || '',
+      sort: qs.get('sort') || 'newest',
+      page: Number(qs.get('page')) || 1,
+      pageSize: 12,
+      bestSeller: qs.get('bestSeller') || '',
+      newOnly: qs.get('newOnly') || '',
+      featured: qs.get('featured') || '',
+    };
+
+    // Prefill inputs
+    document.getElementById('fSearch').value = state.search;
+    document.querySelector(`input[name="age"][value="${state.ageGroup}"]`)?.setAttribute('checked', true);
+    document.querySelector(`input[name="gender"][value="${state.gender}"]`)?.setAttribute('checked', true);
+    document.getElementById('fMin').value = state.minPrice;
+    document.getElementById('fMax').value = state.maxPrice;
+    document.getElementById('fSort').value = state.sort;
+
+    function readInputs() {
+      state.search = document.getElementById('fSearch').value.trim();
+      state.ageGroup = document.querySelector('input[name="age"]:checked')?.value || '';
+      state.gender = document.querySelector('input[name="gender"]:checked')?.value || '';
+      state.size = document.querySelector('#fSize select').value || '';
+      state.color = document.querySelector('#fColor select').value || '';
+      state.minPrice = document.getElementById('fMin').value || '';
+      state.maxPrice = document.getElementById('fMax').value || '';
+      state.sort = document.getElementById('fSort').value;
+      state.page = 1;
+    }
+
+    function populateSizes() {
+      const map = { '1-3': ['12M','18M','24M','2T','3T'], '4-6': ['4','5','6'], '7-10': ['7','8','9','10'] };
+      const sel = document.querySelector('#fSize select');
+      let sizes = [];
+      if (state.ageGroup && map[state.ageGroup]) sizes = map[state.ageGroup];
+      else sizes = [...new Set([].concat(...Object.values(map)))];
+      sel.innerHTML = '<option value="">Any size</option>' + sizes.map(s => `<option>${s}</option>`).join('');
+      if (state.size) sel.value = state.size;
+    }
+
+    async function load() {
+      document.getElementById('grid').innerHTML = '<div class="loader dark"></div>';
+      const params = { ...state };
+      try {
+        const data = await API.products.list(params);
+        document.getElementById('count').textContent = `${data.total} products`;
+        document.getElementById('grid').innerHTML = data.items.length
+          ? data.items.map(renderProductCard).join('')
+          : '<p class="empty">No products match your filters.</p>';
+        renderPagination(data.page, data.totalPages);
+        const newUrl = '?' + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v !== '' && v != null))).toString();
+        history.replaceState(null, '', newUrl);
+      } catch (err) {
+        document.getElementById('grid').innerHTML = `<p class="empty">⚠️ ${err.message}</p>`;
+      }
+    }
+
+    function renderPagination(page, total) {
+      if (total <= 1) { document.getElementById('pagination').innerHTML = ''; return; }
+      const btns = [];
+      for (let i = 1; i <= total; i++) {
+        btns.push(`<button class="page-btn ${i === page ? 'active' : ''}" data-page="${i}">${i}</button>`);
+      }
+      document.getElementById('pagination').innerHTML = btns.join('');
+    }
+
+    document.getElementById('applyFilters').addEventListener('click', () => { readInputs(); populateSizes(); load(); });
+    document.getElementById('resetFilters').addEventListener('click', () => { location.href = '/pages/products.html'; });
+    document.getElementById('fSort').addEventListener('change', () => { readInputs(); load(); });
+    document.getElementById('pagination').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-page]'); if (!b) return;
+      state.page = Number(b.dataset.page); load(); window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    populateSizes();
+    load();
+  </script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Categories — Admin</title>
+  <link rel="stylesheet" href="/admin/css/admin.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <div id="sidebar-root"></div>
+    <main class="main">
+      <div class="topbar"><h1>Categories</h1><button class="btn btn-primary" id="newBtn">+ Add category</button></div>
+      <div class="card">
+        <table><thead><tr><th>Name</th><th>Slug</th><th>Age</th><th>Description</th><th></th></tr></thead>
+          <tbody id="tbody"><tr><td colspan="5">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="modal">
+    <div class="modal">
+      <h2 id="mTitle">Add category</h2>
+      <form id="f">
+        <input type="hidden" name="id"/>
+        <div class="form-row">
+          <div class="form-group"><label>Name</label><input name="name" required/></div>
+          <div class="form-group"><label>Slug</label><input name="slug"/></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Age group</label>
+            <select name="ageGroup"><option value="all">All</option><option>1-3</option><option>4-6</option><option>7-10</option></select>
+          </div>
+          <div class="form-group"><label>Image URL</label><input name="image"/></div>
+        </div>
+        <div class="form-group"><label>Description</label><textarea name="description" rows="2"></textarea></div>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button type="button" class="btn btn-ghost" onclick="ADMIN.modal(false)">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/config.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/admin/js/admin-ui.js"></script>
+  <script>
+    if (!ADMIN.ensureAdmin()) {} else {
+      ADMIN.renderSidebar('categories');
+      async function load() {
+        const tbody = document.getElementById('tbody');
+        try {
+          const cats = await API.categories.list();
+          tbody.innerHTML = cats.length ? cats.map(c => `
+            <tr>
+              <td><b>${c.name}</b></td><td>${c.slug}</td><td>${c.ageGroup}</td>
+              <td style="color:#6b7280">${c.description || '—'}</td>
+              <td style="white-space:nowrap">
+                <button class="btn btn-ghost btn-sm" data-edit='${JSON.stringify(c).replace(/'/g, "&apos;")}'>Edit</button>
+                <button class="btn btn-danger btn-sm" data-del="${c.id}">Del</button>
+              </td>
+            </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:#9ca3af">No categories</td></tr>';
+        } catch (err) { tbody.innerHTML = `<tr><td colspan="5">${err.message}</td></tr>`; }
+      }
+      document.getElementById('newBtn').onclick = () => {
+        document.getElementById('mTitle').textContent = 'Add category';
+        const f = document.getElementById('f'); f.reset(); f.querySelector('[name="id"]').value = '';
+        ADMIN.modal(true);
+      };
+      document.getElementById('tbody').addEventListener('click', async (e) => {
+        const edit = e.target.closest('[data-edit]'); const del = e.target.closest('[data-del]');
+        if (edit) {
+          const c = JSON.parse(edit.dataset.edit);
+          document.getElementById('mTitle').textContent = 'Edit: ' + c.name;
+          const f = document.getElementById('f'); f.reset();
+          for (const k of ['id','name','slug','ageGroup','image','description']) {
+            const el = f.querySelector(`[name="${k}"]`); if (el) el.value = c[k] || '';
+          }
+          ADMIN.modal(true);
+        }
+        if (del) {
+          if (!confirm('Delete?')) return;
+          try { await API.categories.remove(del.dataset.del); ADMIN.toast('Deleted', 'success'); load(); }
+          catch (err) { ADMIN.toast(err.message, 'error'); }
+        }
+      });
+      document.getElementById('f').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const body = Object.fromEntries(fd.entries());
+        const id = body.id; delete body.id;
+        try {
+          if (id) await API.categories.update(id, body); else await API.categories.create(body);
+          ADMIN.toast('Saved', 'success'); ADMIN.modal(false); load();
+        } catch (err) { ADMIN.toast(err.message, 'error'); }
+      });
+      load();
+    }
+  </script>
+</body>
+</html>

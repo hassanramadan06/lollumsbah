@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Dashboard — Admin</title>
+  <link rel="stylesheet" href="/admin/css/admin.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <div id="sidebar-root"></div>
+    <main class="main">
+      <div class="topbar">
+        <h1>Dashboard</h1>
+        <div style="color:var(--muted);font-size:13px" id="today"></div>
+      </div>
+
+      <div class="stats" id="stats">
+        <div class="stat"><div class="label">Loading...</div></div>
+      </div>
+
+      <div class="card mb-20" style="margin-bottom:20px">
+        <h3 style="margin-bottom:16px">Sales (last 30 days)</h3>
+        <canvas id="chart" class="chart"></canvas>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:16px">Top products</h3>
+        <table><thead><tr><th>#</th><th>Product</th><th>Sold</th><th>Revenue</th></tr></thead><tbody id="topList"></tbody></table>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/config.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/admin/js/admin-ui.js"></script>
+  <script>
+    if (!ADMIN.ensureAdmin()) {} else {
+      ADMIN.renderSidebar('dashboard');
+      document.getElementById('today').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+      (async () => {
+        try {
+          const r = await API.admin.reports();
+          const s = r.summary;
+          const icons = { users: '👥', products: '🧸', orders: '📦', revenue: '💰', pending: '⏳' };
+          const labels = { users: 'Customers', products: 'Products', orders: 'Orders', revenue: 'Revenue', pending: 'Pending' };
+          const values = {
+            users: s.users, products: s.products, orders: s.orders,
+            revenue: ADMIN.formatPrice(s.revenue), pending: s.pending,
+          };
+          document.getElementById('stats').innerHTML = Object.keys(labels).map(k => `
+            <div class="stat">
+              <div class="icon">${icons[k]}</div>
+              <div class="label">${labels[k]}</div>
+              <div class="value">${values[k]}</div>
+            </div>
+          `).join('');
+
+          // Simple canvas bar chart
+          const canvas = document.getElementById('chart');
+          const ctx = canvas.getContext('2d');
+          const W = canvas.width = canvas.offsetWidth * devicePixelRatio;
+          const H = canvas.height = 260 * devicePixelRatio;
+          ctx.scale(1, 1);
+          ctx.clearRect(0, 0, W, H);
+          const data = r.salesByDay || [];
+          if (data.length === 0) {
+            ctx.fillStyle = '#9ca3af'; ctx.font = `${14*devicePixelRatio}px Nunito`;
+            ctx.fillText('No sales yet', 20, 40);
+          } else {
+            const pad = 40 * devicePixelRatio;
+            const max = Math.max(...data.map(d => Number(d.total))) || 1;
+            const barW = (W - pad * 2) / data.length;
+            ctx.fillStyle = '#e5e7eb';
+            ctx.fillRect(pad, H - pad, W - pad * 2, 1);
+            data.forEach((d, i) => {
+              const h = ((Number(d.total) / max) * (H - pad * 2));
+              const x = pad + i * barW;
+              const y = H - pad - h;
+              const grad = ctx.createLinearGradient(0, y, 0, H - pad);
+              grad.addColorStop(0, '#6366f1'); grad.addColorStop(1, '#a5b4fc');
+              ctx.fillStyle = grad;
+              ctx.fillRect(x + 2, y, barW - 4, h);
+              ctx.fillStyle = '#6b7280'; ctx.font = `${10*devicePixelRatio}px Nunito`;
+              if (i % Math.ceil(data.length / 8) === 0) {
+                ctx.fillText(new Date(d.day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), x, H - pad + 16 * devicePixelRatio);
+              }
+            });
+          }
+
+          document.getElementById('topList').innerHTML = (r.topProducts || []).map((t, i) => `
+            <tr><td>${i+1}</td><td>${t.productName}</td><td>${t.sold}</td><td>${ADMIN.formatPrice(t.revenue)}</td></tr>
+          `).join('') || '<tr><td colspan="4" style="text-align:center;color:#9ca3af">No data</td></tr>';
+        } catch (err) { ADMIN.toast(err.message, 'error'); }
+      })();
+    }
+  </script>
+</body>
+</html>

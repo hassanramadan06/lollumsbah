@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Cart — Little Stars</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="header-root"></div>
+
+  <main class="container section">
+    <h1 class="section-title">Your Cart</h1>
+    <div class="cart-layout">
+      <div id="cartList"><div class="loader dark"></div></div>
+      <aside class="cart-summary" id="summary">
+        <h3>Order summary</h3>
+        <div class="summary-row"><span>Subtotal</span><span id="sSub">—</span></div>
+        <div class="summary-row"><span>Discount</span><span id="sDisc">—</span></div>
+        <div class="summary-row"><span>Shipping</span><span id="sShip">$5.00</span></div>
+        <div class="summary-total"><span>Total</span><span id="sTotal">—</span></div>
+
+        <div class="mt-20">
+          <label>Coupon code</label>
+          <div class="flex gap-10 mt-10">
+            <input id="coupon" placeholder="e.g. WELCOME10"/>
+            <button class="btn btn-ghost" id="applyCoupon">Apply</button>
+          </div>
+          <div id="couponMsg" class="text-muted mt-10" style="font-size:13px"></div>
+        </div>
+
+        <button class="btn btn-primary btn-block mt-20" id="checkoutBtn">Proceed to Checkout</button>
+      </aside>
+    </div>
+  </main>
+
+  <div id="footer-root"></div>
+
+  <script src="/js/config.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    let items = [];
+    let discount = 0;
+    let couponCode = '';
+    const SHIPPING = 5;
+
+    async function loadCart() {
+      const host = document.getElementById('cartList');
+      try {
+        if (API.getToken()) {
+          items = (await API.cart.list()).map(ci => ({
+            id: ci.id,
+            productId: ci.productId,
+            quantity: ci.quantity,
+            size: ci.size,
+            color: ci.color,
+            name: ci.product?.name || 'Product',
+            image: ci.product?.mainImage || (ci.product?.images?.[0]?.url || ''),
+            price: Number(ci.product?.discountPrice || ci.product?.price || 0),
+          }));
+        } else {
+          const guest = JSON.parse(localStorage.getItem('guestCart') || '[]');
+          // Hydrate missing product names/prices
+          items = [];
+          for (const g of guest) {
+            if (!g.name) {
+              try {
+                const p = await API.products.get(g.productId);
+                g.name = p.name; g.price = Number(p.discountPrice || p.price); g.image = p.mainImage;
+              } catch (_) { g.name = 'Product'; g.price = 0; g.image = ''; }
+            }
+            items.push({ ...g, id: `${g.productId}-${g.size||''}-${g.color||''}` });
+          }
+          localStorage.setItem('guestCart', JSON.stringify(items));
+        }
+        if (!items.length) {
+          host.innerHTML = `<p class="empty">Your cart is empty. <a href="/pages/products.html">Start shopping →</a></p>`;
+        } else {
+          host.innerHTML = items.map(renderItem).join('');
+        }
+        computeTotals();
+      } catch (err) {
+        host.innerHTML = `<p class="empty">${err.message}</p>`;
+      }
+    }
+
+    function renderItem(i) {
+      return `
+        <div class="cart-item" data-id="${i.id}">
+          <img src="${i.image || 'https://picsum.photos/seed/' + i.productId + '/200/250'}" alt="${i.name}"/>
+          <div>
+            <div class="name">${i.name}</div>
+            <div class="meta">
+              ${i.size ? 'Size: ' + i.size + ' · ' : ''}${i.color ? 'Color: ' + i.color : ''}
+            </div>
+            <div class="price">${UI.formatPrice(i.price)}</div>
+            <div class="qty-ctl mt-10">
+              <button data-act="dec">−</button>
+              <input type="number" min="1" value="${i.quantity}" data-qty/>
+              <button data-act="inc">+</button>
+            </div>
+          </div>
+          <button class="icon-btn" title="Remove" data-act="remove" style="background:#fee2e2;color:var(--danger)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      `;
+    }
+
+    function computeTotals() {
+      const sub = items.reduce((s, i) => s + i.price * i.quantity, 0);
+      const total = Math.max(0, sub - discount + (items.length ? SHIPPING : 0));
+      document.getElementById('sSub').textContent = UI.formatPrice(sub);
+      document.getElementById('sDisc').textContent = discount ? '−' + UI.formatPrice(discount) : '—';
+      document.getElementById('sShip').textContent = items.length ? UI.formatPrice(SHIPPING) : UI.formatPrice(0);
+      document.getElementById('sTotal').textContent = UI.formatPrice(total);
+    }
+
+    document.getElementById('cartList').addEventListener('click', async (e) => {
+      const row = e.target.closest('.cart-item'); if (!row) return;
+      const id = row.dataset.id;
+      const item = items.find(i => String(i.id) === String(id));
+      if (!item) return;
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (!act) return;
+
+      if (act === 'inc' || act === 'dec') {
+        item.quantity = Math.max(1, item.quantity + (act === 'inc' ? 1 : -1));
+        row.querySelector('[data-qty]').value = item.quantity;
+        if (API.getToken()) await API.cart.update(item.id, { quantity: item.quantity });
+        else localStorage.setItem('guestCart', JSON.stringify(items));
+        computeTotals();
+      } else if (act === 'remove') {
+        if (API.getToken()) await API.cart.remove(item.id);
+        else {
+          items = items.filter(i => String(i.id) !== String(id));
+          localStorage.setItem('guestCart', JSON.stringify(items));
+        }
+        UI.renderHeader();
+        loadCart();
+      }
+    });
+
+    document.getElementById('cartList').addEventListener('change', async (e) => {
+      const input = e.target.closest('[data-qty]'); if (!input) return;
+      const row = input.closest('.cart-item');
+      const id = row.dataset.id;
+      const item = items.find(i => String(i.id) === String(id));
+      if (!item) return;
+      item.quantity = Math.max(1, Number(input.value) || 1);
+      input.value = item.quantity;
+      if (API.getToken()) await API.cart.update(item.id, { quantity: item.quantity });
+      else localStorage.setItem('guestCart', JSON.stringify(items));
+      computeTotals();
+    });
+
+    document.getElementById('applyCoupon').onclick = async () => {
+      const code = document.getElementById('coupon').value.trim();
+      if (!code) return;
+      const sub = items.reduce((s, i) => s + i.price * i.quantity, 0);
+      try {
+        const res = await API.orders.validateCoupon(code, sub);
+        discount = Number(res.discount || 0);
+        couponCode = code;
+        document.getElementById('couponMsg').innerHTML = `<span style="color:var(--success)">✓ Coupon applied: ${code}</span>`;
+        computeTotals();
+      } catch (err) {
+        discount = 0; couponCode = '';
+        document.getElementById('couponMsg').innerHTML = `<span style="color:var(--danger)">${err.message}</span>`;
+        computeTotals();
+      }
+    };
+
+    document.getElementById('checkoutBtn').onclick = () => {
+      if (!items.length) return UI.toast('Your cart is empty', 'error');
+      sessionStorage.setItem('checkoutCoupon', couponCode);
+      location.href = '/pages/checkout.html';
+    };
+
+    loadCart();
+  </script>
+</body>
+</html>

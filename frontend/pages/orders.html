@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>My Orders — Little Stars</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="header-root"></div>
+  <main class="container section">
+    <h1 class="section-title">My Orders</h1>
+    <div id="list" class="mt-20"><div class="loader dark"></div></div>
+  </main>
+  <div id="footer-root"></div>
+  <script src="/js/config.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    if (!UI.requireAuth()) {} else {
+      (async () => {
+        const host = document.getElementById('list');
+        try {
+          const orders = await API.orders.mine();
+          if (!orders.length) return host.innerHTML = '<p class="empty">No orders yet.</p>';
+          host.innerHTML = orders.map(o => `
+            <div class="panel" style="max-width:100%;margin:10px 0">
+              <div class="flex-between">
+                <div>
+                  <b>${o.orderNumber}</b>
+                  <div class="text-muted" style="font-size:13px">${new Date(o.createdAt).toLocaleString()}</div>
+                </div>
+                <div><span class="tag" style="background:var(--secondary);color:#fff;padding:4px 10px;border-radius:999px;font-size:12px;text-transform:uppercase">${o.status}</span></div>
+              </div>
+              <div class="mt-10">${o.items.map(i => `<div style="font-size:14px">${i.quantity} × ${i.productName} <span class="text-muted">(${i.size||''} ${i.color||''})</span> — ${UI.formatPrice(i.price)}</div>`).join('')}</div>
+              <div class="flex-between mt-10" style="padding-top:10px;border-top:1px solid var(--border)">
+                <span>Total</span><b>${UI.formatPrice(o.total)}</b>
+              </div>
+            </div>
+          `).join('');
+        } catch (err) { host.innerHTML = `<p class="empty">${err.message}</p>`; }
+      })();
+    }
+  </script>
+</body>
+</html>

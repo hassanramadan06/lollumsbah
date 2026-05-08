@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Orders — Admin</title>
+  <link rel="stylesheet" href="/admin/css/admin.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <div id="sidebar-root"></div>
+    <main class="main">
+      <div class="topbar"><h1>Orders</h1></div>
+      <div class="card">
+        <div class="toolbar">
+          <input id="search" placeholder="Order #, customer..." style="max-width:280px"/>
+          <select id="fStatus" style="max-width:180px">
+            <option value="">All statuses</option>
+            <option>pending</option><option>confirmed</option><option>shipped</option>
+            <option>delivered</option><option>cancelled</option>
+          </select>
+        </div>
+        <table>
+          <thead><tr><th>Order #</th><th>Customer</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th><th>Date</th><th></th></tr></thead>
+          <tbody id="tbody"><tr><td colspan="8">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+  <script src="/js/config.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/admin/js/admin-ui.js"></script>
+  <script>
+    if (!ADMIN.ensureAdmin()) {} else {
+      ADMIN.renderSidebar('orders');
+      const state = { search: '', status: '' };
+      async function load() {
+        const tbody = document.getElementById('tbody');
+        try {
+          const r = await API.admin.orders({ search: state.search, status: state.status, pageSize: 50 });
+          tbody.innerHTML = r.items.length ? r.items.map(o => `
+            <tr>
+              <td><b>${o.orderNumber}</b></td>
+              <td>${o.customerName}<br><small style="color:#9ca3af">${o.customerEmail}</small></td>
+              <td>${(o.items || []).length}</td>
+              <td>${ADMIN.formatPrice(o.total)}</td>
+              <td>${o.paymentMethod}</td>
+              <td>
+                <select data-status="${o.id}" class="badge badge-${o.status}" style="border:0">
+                  ${['pending','confirmed','shipped','delivered','cancelled'].map(s => `<option ${s===o.status?'selected':''}>${s}</option>`).join('')}
+                </select>
+              </td>
+              <td>${ADMIN.fmtDate(o.createdAt)}</td>
+              <td><button class="btn btn-ghost btn-sm" data-view='${JSON.stringify(o).replace(/'/g,"&apos;")}'>View</button></td>
+            </tr>
+          `).join('') : '<tr><td colspan="8" style="text-align:center;color:#9ca3af">No orders</td></tr>';
+        } catch (err) { tbody.innerHTML = `<tr><td colspan="8">${err.message}</td></tr>`; }
+      }
+      document.getElementById('search').oninput = (e) => { state.search = e.target.value.trim(); clearTimeout(window._t); window._t = setTimeout(load, 250); };
+      document.getElementById('fStatus').onchange = (e) => { state.status = e.target.value; load(); };
+      document.getElementById('tbody').addEventListener('change', async (e) => {
+        const sel = e.target.closest('[data-status]'); if (!sel) return;
+        try { await API.admin.updateOrderStatus(sel.dataset.status, sel.value); ADMIN.toast('Status updated', 'success'); load(); }
+        catch (err) { ADMIN.toast(err.message, 'error'); }
+      });
+      document.getElementById('tbody').addEventListener('click', (e) => {
+        const v = e.target.closest('[data-view]'); if (!v) return;
+        const o = JSON.parse(v.dataset.view);
+        alert(
+          `Order ${o.orderNumber}\n` +
+          `Customer: ${o.customerName} (${o.customerEmail}, ${o.customerPhone})\n` +
+          `Ship to: ${o.shippingAddress}, ${o.city}\n` +
+          `Subtotal: ${o.subtotal}  Discount: ${o.discount}  Ship: ${o.shippingCost}  Total: ${o.total}\n\n` +
+          (o.items || []).map(i => `- ${i.quantity} × ${i.productName} (${i.size||''} ${i.color||''}) @ ${i.price}`).join('\n')
+        );
+      });
+      load();
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>My Account — Little Stars</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="header-root"></div>
+  <main class="container section">
+    <div class="panel" style="max-width:600px">
+      <h1>My account</h1>
+      <p class="sub" id="hello"></p>
+      <form id="f">
+        <div class="form-row">
+          <div class="form-group"><label>Name</label><input name="name" required/></div>
+          <div class="form-group"><label>Phone</label><input name="phone"/></div>
+        </div>
+        <div class="form-group"><label>Address</label><input name="address"/></div>
+        <div class="form-group"><label>City</label><input name="city"/></div>
+        <button class="btn btn-primary" type="submit">Save</button>
+      </form>
+      <div class="mt-30">
+        <a class="btn btn-ghost" href="/pages/orders.html">📦 My orders</a>
+        <a class="btn btn-ghost" href="/pages/wishlist.html">❤ Wishlist</a>
+        <button class="btn btn-danger" onclick="UI.logout()">Sign out</button>
+      </div>
+    </div>
+  </main>
+  <div id="footer-root"></div>
+  <script src="/js/config.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    if (!UI.requireAuth()) {} else {
+      (async () => {
+        const me = await API.auth.me();
+        document.getElementById('hello').textContent = `Signed in as ${me.email}`;
+        document.querySelector('[name="name"]').value = me.name || '';
+        document.querySelector('[name="phone"]').value = me.phone || '';
+        document.querySelector('[name="address"]').value = me.address || '';
+        document.querySelector('[name="city"]').value = me.city || '';
+      })();
+      document.getElementById('f').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = Object.fromEntries(new FormData(e.target).entries());
+        try { await API.auth.updateProfile(fd); UI.toast('Saved', 'success'); }
+        catch (err) { UI.toast(err.message, 'error'); }
+      });
+    }
+  </script>
+</body>
+</html>

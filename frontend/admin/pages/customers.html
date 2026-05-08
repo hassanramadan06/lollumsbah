@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Customers — Admin</title>
+  <link rel="stylesheet" href="/admin/css/admin.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <div id="sidebar-root"></div>
+    <main class="main">
+      <div class="topbar"><h1>Customers</h1></div>
+      <div class="card">
+        <div class="toolbar">
+          <input id="search" placeholder="Search name/email..." style="max-width:300px"/>
+        </div>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>City</th><th>Role</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+          <tbody id="tbody"><tr><td colspan="8">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+  <script src="/js/config.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/admin/js/admin-ui.js"></script>
+  <script>
+    if (!ADMIN.ensureAdmin()) {} else {
+      ADMIN.renderSidebar('customers');
+      const state = { search: '' };
+      async function load() {
+        const tbody = document.getElementById('tbody');
+        try {
+          const r = await API.admin.users({ search: state.search, pageSize: 50 });
+          tbody.innerHTML = r.items.length ? r.items.map(u => `
+            <tr>
+              <td><b>${u.name}</b></td><td>${u.email}</td><td>${u.phone || '—'}</td><td>${u.city || '—'}</td>
+              <td><span class="badge ${u.role === 'admin' ? 'badge-confirmed' : 'badge-delivered'}">${u.role}</span></td>
+              <td><span class="badge ${u.isActive ? 'badge-delivered' : 'badge-cancelled'}">${u.isActive ? 'active' : 'disabled'}</span></td>
+              <td>${ADMIN.fmtDate(u.createdAt)}</td>
+              <td><button class="btn btn-ghost btn-sm" data-toggle="${u.id}">${u.isActive ? 'Disable' : 'Enable'}</button></td>
+            </tr>
+          `).join('') : '<tr><td colspan="8" style="text-align:center;color:#9ca3af">No customers</td></tr>';
+        } catch (err) { tbody.innerHTML = `<tr><td colspan="8">${err.message}</td></tr>`; }
+      }
+      document.getElementById('search').oninput = (e) => { state.search = e.target.value.trim(); clearTimeout(window._t); window._t = setTimeout(load, 250); };
+      document.getElementById('tbody').addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-toggle]'); if (!btn) return;
+        try { await API.admin.toggleUser(btn.dataset.toggle); load(); } catch (err) { ADMIN.toast(err.message, 'error'); }
+      });
+      load();
+    }
+  </script>
+</body>
+</html>

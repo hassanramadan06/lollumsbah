@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Coupons — Admin</title>
+  <link rel="stylesheet" href="/admin/css/admin.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <div id="sidebar-root"></div>
+    <main class="main">
+      <div class="topbar"><h1>Coupons</h1><button class="btn btn-primary" id="newBtn">+ Add coupon</button></div>
+      <div class="card">
+        <table>
+          <thead><tr><th>Code</th><th>Type</th><th>Amount</th><th>Min order</th><th>Usage</th><th>Expires</th><th>Status</th><th></th></tr></thead>
+          <tbody id="tbody"><tr><td colspan="8">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="modal">
+    <div class="modal">
+      <h2 id="mTitle">Add coupon</h2>
+      <form id="f">
+        <input type="hidden" name="id"/>
+        <div class="form-row">
+          <div class="form-group"><label>Code</label><input name="code" required/></div>
+          <div class="form-group"><label>Type</label>
+            <select name="type"><option value="percent">Percent (%)</option><option value="fixed">Fixed amount</option></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Amount</label><input name="amount" type="number" step="0.01" required/></div>
+          <div class="form-group"><label>Minimum order</label><input name="minOrder" type="number" step="0.01" value="0"/></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Usage limit (0 = unlimited)</label><input name="usageLimit" type="number" value="0"/></div>
+          <div class="form-group"><label>Expires at</label><input name="expiresAt" type="datetime-local"/></div>
+        </div>
+        <div class="form-group"><label><input type="checkbox" name="isActive" checked/> Active</label></div>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button type="button" class="btn btn-ghost" onclick="ADMIN.modal(false)">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/config.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/admin/js/admin-ui.js"></script>
+  <script>
+    if (!ADMIN.ensureAdmin()) {} else {
+      ADMIN.renderSidebar('coupons');
+      async function load() {
+        const tbody = document.getElementById('tbody');
+        try {
+          const coupons = await API.coupons.list();
+          tbody.innerHTML = coupons.length ? coupons.map(c => `
+            <tr>
+              <td><b>${c.code}</b></td><td>${c.type}</td>
+              <td>${c.type === 'percent' ? `${c.amount}%` : ADMIN.formatPrice(c.amount)}</td>
+              <td>${ADMIN.formatPrice(c.minOrder)}</td>
+              <td>${c.usedCount}${c.usageLimit > 0 ? '/' + c.usageLimit : ''}</td>
+              <td>${c.expiresAt ? new Date(c.expiresAt).toLocaleDateString() : '—'}</td>
+              <td><span class="badge ${c.isActive ? 'badge-delivered' : 'badge-cancelled'}">${c.isActive ? 'active' : 'inactive'}</span></td>
+              <td style="white-space:nowrap">
+                <button class="btn btn-ghost btn-sm" data-edit='${JSON.stringify(c).replace(/'/g,"&apos;")}'>Edit</button>
+                <button class="btn btn-danger btn-sm" data-del="${c.id}">Del</button>
+              </td>
+            </tr>
+          `).join('') : '<tr><td colspan="8" style="text-align:center;color:#9ca3af">No coupons</td></tr>';
+        } catch (err) { tbody.innerHTML = `<tr><td colspan="8">${err.message}</td></tr>`; }
+      }
+      document.getElementById('newBtn').onclick = () => {
+        document.getElementById('mTitle').textContent = 'Add coupon';
+        const f = document.getElementById('f'); f.reset(); f.querySelector('[name="id"]').value = '';
+        ADMIN.modal(true);
+      };
+      document.getElementById('tbody').addEventListener('click', async (e) => {
+        const edit = e.target.closest('[data-edit]'); const del = e.target.closest('[data-del]');
+        if (edit) {
+          const c = JSON.parse(edit.dataset.edit);
+          document.getElementById('mTitle').textContent = 'Edit: ' + c.code;
+          const f = document.getElementById('f'); f.reset();
+          for (const k of ['id','code','type','amount','minOrder','usageLimit']) {
+            const el = f.querySelector(`[name="${k}"]`); if (el) el.value = c[k] ?? '';
+          }
+          if (c.expiresAt) f.querySelector('[name="expiresAt"]').value = new Date(c.expiresAt).toISOString().slice(0,16);
+          f.querySelector('[name="isActive"]').checked = !!c.isActive;
+          ADMIN.modal(true);
+        }
+        if (del) {
+          if (!confirm('Delete?')) return;
+          try { await API.coupons.remove(del.dataset.del); ADMIN.toast('Deleted', 'success'); load(); }
+          catch (err) { ADMIN.toast(err.message, 'error'); }
+        }
+      });
+      document.getElementById('f').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const body = {
+          code: fd.get('code'),
+          type: fd.get('type'),
+          amount: Number(fd.get('amount')),
+          minOrder: Number(fd.get('minOrder') || 0),
+          usageLimit: Number(fd.get('usageLimit') || 0),
+          expiresAt: fd.get('expiresAt') ? new Date(fd.get('expiresAt')).toISOString() : null,
+          isActive: !!fd.get('isActive'),
+        };
+        const id = fd.get('id');
+        try {
+          if (id) await API.coupons.update(id, body); else await API.coupons.create(body);
+          ADMIN.toast('Saved', 'success'); ADMIN.modal(false); load();
+        } catch (err) { ADMIN.toast(err.message, 'error'); }
+      });
+      load();
+    }
+  </script>
+</body>
+</html>

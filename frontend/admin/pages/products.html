@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Products — Admin</title>
+  <link rel="stylesheet" href="/admin/css/admin.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <div id="sidebar-root"></div>
+    <main class="main">
+      <div class="topbar">
+        <h1>Products</h1>
+        <button class="btn btn-primary" id="newBtn">+ Add product</button>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <input id="search" placeholder="Search products..." style="max-width:300px"/>
+          <select id="fAge" style="max-width:180px">
+            <option value="">All ages</option><option>1-3</option><option>4-6</option><option>7-10</option>
+          </select>
+        </div>
+        <table>
+          <thead><tr><th>Image</th><th>Name</th><th>Category</th><th>Age</th><th>Price</th><th>Stock</th><th>Tags</th><th></th></tr></thead>
+          <tbody id="tbody"><tr><td colspan="8">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modal">
+    <div class="modal">
+      <h2 id="mTitle">Add product</h2>
+      <form id="pForm">
+        <input type="hidden" name="id"/>
+        <div class="form-row">
+          <div class="form-group"><label>Name</label><input name="name" required/></div>
+          <div class="form-group"><label>SKU</label><input name="sku"/></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Category</label><select name="categoryId" id="cats"></select></div>
+          <div class="form-group"><label>Age group</label>
+            <select name="ageGroup" required><option value="1-3">1-3</option><option value="4-6">4-6</option><option value="7-10">7-10</option></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Gender</label>
+            <select name="gender"><option value="unisex">Unisex</option><option value="boy">Boy</option><option value="girl">Girl</option></select>
+          </div>
+          <div class="form-group"><label>Stock</label><input name="stock" type="number" value="50"/></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Price</label><input name="price" type="number" step="0.01" required/></div>
+          <div class="form-group"><label>Discount price (optional)</label><input name="discountPrice" type="number" step="0.01"/></div>
+        </div>
+        <div class="form-group"><label>Description</label><textarea name="description" rows="3"></textarea></div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label><input type="checkbox" name="isFeatured"/> Featured</label>
+            <label><input type="checkbox" name="isNew"/> New arrival</label>
+            <label><input type="checkbox" name="isBestSeller"/> Best seller</label>
+            <label><input type="checkbox" name="isActive" checked/> Active</label>
+          </div>
+          <div class="form-group">
+            <label>Main image URL</label>
+            <input name="mainImage"/>
+            <input type="file" accept="image/*" id="mainUpload" style="margin-top:6px"/>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Additional images (comma-separated URLs)</label>
+          <textarea name="imagesText" rows="2" placeholder="https://... , https://..."></textarea>
+          <input type="file" accept="image/*" multiple id="multiUpload" style="margin-top:6px"/>
+        </div>
+
+        <div class="form-group">
+          <label>Variants (one per line: size|color|hex|stock)</label>
+          <textarea name="variantsText" rows="3" placeholder="4|Red|#e63946|10&#10;4|Blue|#1d4ed8|5"></textarea>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button type="button" class="btn btn-ghost" onclick="ADMIN.modal(false)">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/config.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/admin/js/admin-ui.js"></script>
+  <script>
+    if (!ADMIN.ensureAdmin()) {} else {
+      ADMIN.renderSidebar('products');
+
+      let categories = [];
+      const state = { search: '', ageGroup: '' };
+
+      async function loadCats() {
+        categories = await API.categories.list();
+        document.getElementById('cats').innerHTML = '<option value="">-- none --</option>' +
+          categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      }
+
+      async function load() {
+        const tbody = document.getElementById('tbody');
+        tbody.innerHTML = '<tr><td colspan="8">Loading...</td></tr>';
+        try {
+          const r = await API.products.list({ search: state.search, ageGroup: state.ageGroup, pageSize: 50 });
+          tbody.innerHTML = r.items.length ? r.items.map(p => {
+            const tags = [
+              p.isFeatured ? '<span class="badge badge-confirmed">Featured</span>' : '',
+              p.isNew ? '<span class="badge badge-shipped">New</span>' : '',
+              p.isBestSeller ? '<span class="badge badge-delivered">Best</span>' : '',
+            ].filter(Boolean).join(' ');
+            return `
+              <tr>
+                <td><img src="${p.mainImage || ''}" style="width:50px;height:60px;object-fit:cover;border-radius:6px"/></td>
+                <td><b>${p.name}</b><br><small style="color:#9ca3af">${p.slug}</small></td>
+                <td>${p.category?.name || '-'}</td>
+                <td>${p.ageGroup}</td>
+                <td>${ADMIN.formatPrice(p.discountPrice || p.price)}${p.discountPrice ? ` <s style="color:#9ca3af">${ADMIN.formatPrice(p.price)}</s>` : ''}</td>
+                <td>${p.stock}</td>
+                <td>${tags || '—'}</td>
+                <td style="white-space:nowrap">
+                  <button class="btn btn-ghost btn-sm" data-edit="${p.id}">Edit</button>
+                  <button class="btn btn-danger btn-sm" data-del="${p.id}">Del</button>
+                </td>
+              </tr>
+            `;
+          }).join('') : '<tr><td colspan="8" style="text-align:center;color:#9ca3af">No products</td></tr>';
+        } catch (err) { tbody.innerHTML = `<tr><td colspan="8">${err.message}</td></tr>`; }
+      }
+
+      document.getElementById('search').oninput = (e) => { state.search = e.target.value.trim(); clearTimeout(window._t); window._t = setTimeout(load, 250); };
+      document.getElementById('fAge').onchange = (e) => { state.ageGroup = e.target.value; load(); };
+
+      document.getElementById('tbody').addEventListener('click', async (e) => {
+        const edit = e.target.closest('[data-edit]'); const del = e.target.closest('[data-del]');
+        if (edit) return openEdit(edit.dataset.edit);
+        if (del) {
+          if (!confirm('Delete this product?')) return;
+          try { await API.products.remove(del.dataset.del); ADMIN.toast('Deleted', 'success'); load(); }
+          catch (err) { ADMIN.toast(err.message, 'error'); }
+        }
+      });
+
+      document.getElementById('newBtn').onclick = () => openNew();
+
+      function openNew() {
+        document.getElementById('mTitle').textContent = 'Add product';
+        const f = document.getElementById('pForm'); f.reset();
+        f.querySelector('[name="id"]').value = '';
+        ADMIN.modal(true);
+      }
+
+      async function openEdit(id) {
+        try {
+          const p = await API.products.get(id);
+          document.getElementById('mTitle').textContent = 'Edit: ' + p.name;
+          const f = document.getElementById('pForm');
+          f.querySelector('[name="id"]').value = p.id;
+          f.querySelector('[name="name"]').value = p.name;
+          f.querySelector('[name="sku"]').value = p.sku || '';
+          f.querySelector('[name="categoryId"]').value = p.categoryId || '';
+          f.querySelector('[name="ageGroup"]').value = p.ageGroup;
+          f.querySelector('[name="gender"]').value = p.gender;
+          f.querySelector('[name="stock"]').value = p.stock || 0;
+          f.querySelector('[name="price"]').value = p.price;
+          f.querySelector('[name="discountPrice"]').value = p.discountPrice || '';
+          f.querySelector('[name="description"]').value = p.description || '';
+          f.querySelector('[name="mainImage"]').value = p.mainImage || '';
+          f.querySelector('[name="isFeatured"]').checked = !!p.isFeatured;
+          f.querySelector('[name="isNew"]').checked = !!p.isNew;
+          f.querySelector('[name="isBestSeller"]').checked = !!p.isBestSeller;
+          f.querySelector('[name="isActive"]').checked = !!p.isActive;
+          f.querySelector('[name="imagesText"]').value = (p.images || []).map(i => i.url).join(', ');
+          f.querySelector('[name="variantsText"]').value = (p.variants || [])
+            .map(v => `${v.size}|${v.color}|${v.colorHex || ''}|${v.stock}`).join('\n');
+          ADMIN.modal(true);
+        } catch (err) { ADMIN.toast(err.message, 'error'); }
+      }
+
+      document.getElementById('mainUpload').onchange = async (e) => {
+        if (!e.target.files[0]) return;
+        try { const r = await API.uploads.single(e.target.files[0]);
+          document.querySelector('[name="mainImage"]').value = (window.APP_CONFIG.UPLOADS_BASE) + r.url;
+          ADMIN.toast('Image uploaded', 'success');
+        } catch (err) { ADMIN.toast(err.message, 'error'); }
+      };
+      document.getElementById('multiUpload').onchange = async (e) => {
+        if (!e.target.files.length) return;
+        try {
+          const r = await API.uploads.multi(e.target.files);
+          const urls = r.files.map(f => window.APP_CONFIG.UPLOADS_BASE + f.url);
+          const cur = document.querySelector('[name="imagesText"]').value;
+          document.querySelector('[name="imagesText"]').value = [cur, ...urls].filter(Boolean).join(', ');
+          ADMIN.toast('Images uploaded', 'success');
+        } catch (err) { ADMIN.toast(err.message, 'error'); }
+      };
+
+      document.getElementById('pForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const body = {
+          name: fd.get('name'),
+          sku: fd.get('sku') || null,
+          categoryId: Number(fd.get('categoryId')) || null,
+          ageGroup: fd.get('ageGroup'),
+          gender: fd.get('gender'),
+          stock: Number(fd.get('stock')) || 0,
+          price: Number(fd.get('price')),
+          discountPrice: fd.get('discountPrice') ? Number(fd.get('discountPrice')) : null,
+          description: fd.get('description'),
+          mainImage: fd.get('mainImage') || null,
+          isFeatured: !!fd.get('isFeatured'),
+          isNew: !!fd.get('isNew'),
+          isBestSeller: !!fd.get('isBestSeller'),
+          isActive: !!fd.get('isActive'),
+        };
+        const imagesText = fd.get('imagesText') || '';
+        if (imagesText.trim()) body.images = imagesText.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+        const variantsText = fd.get('variantsText') || '';
+        if (variantsText.trim()) body.variants = variantsText.split('\n').map(line => {
+          const [size, color, colorHex, stock] = line.split('|').map(s => (s || '').trim());
+          return { size, color, colorHex: colorHex || null, stock: Number(stock) || 0 };
+        }).filter(v => v.size && v.color);
+
+        const id = fd.get('id');
+        try {
+          if (id) await API.products.update(id, body); else await API.products.create(body);
+          ADMIN.toast('Saved', 'success'); ADMIN.modal(false); load();
+        } catch (err) { ADMIN.toast(err.message, 'error'); }
+      });
+
+      loadCats().then(load);
+    }
+  </script>
+</body>
+</html>

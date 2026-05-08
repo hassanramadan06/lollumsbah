@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Sign in — Little Stars</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="header-root"></div>
+  <main class="container">
+    <div class="panel">
+      <h1>Welcome back 👋</h1>
+      <p class="sub">Sign in to continue shopping.</p>
+      <form id="f">
+        <div class="form-group"><label>Email</label><input name="email" type="email" required/></div>
+        <div class="form-group"><label>Password</label><input name="password" type="password" required/></div>
+        <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+      </form>
+      <p class="text-center mt-20">New customer? <a href="/pages/register.html" style="color:var(--primary);font-weight:700">Create an account</a></p>
+      <div class="alert alert-success mt-20" style="font-size:13px">
+        Demo admin: <b>admin@kidsstore.com</b> / <b>Admin@12345</b><br>
+        Demo customer: <b>customer@kidsstore.com</b> / <b>Customer@123</b>
+      </div>
+    </div>
+  </main>
+  <div id="footer-root"></div>
+  <script src="/js/config.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    document.getElementById('f').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      try {
+        const { token, user } = await API.auth.login(fd.get('email'), fd.get('password'));
+        API.setToken(token); API.setUser(user);
+        UI.toast('Signed in', 'success');
+        const next = new URLSearchParams(location.search).get('next');
+        setTimeout(() => location.href = next || (user.role === 'admin' ? '/admin/index.html' : '/index.html'), 400);
+      } catch (err) { UI.toast(err.message, 'error'); }
+    });
+  </script>
+</body>
+</html>
